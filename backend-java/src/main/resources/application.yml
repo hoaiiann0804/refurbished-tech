@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: refurbished-backend
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      accept-float-as-int: false
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  sql:
+    init:
+      mode: never
+
+server:
+  address: 127.0.0.1
+  port: 8080
+  error:
+    include-message: never
+    include-stacktrace: never
+
+app:
+  security:
+    jwt:
+      secret: ${REFURBISHED_JWT_SECRET:}
+      issuer: refurbished-backend
+      access-token-minutes: 30
+    google:
+      client-id: ${REFURBISHED_GOOGLE_CLIENT_ID:}
+      client-secret: ${REFURBISHED_GOOGLE_CLIENT_SECRET:}
+      frontend-callback: ${REFURBISHED_OAUTH_FRONTEND_CALLBACK:http://127.0.0.1:5173/oauth/callback}

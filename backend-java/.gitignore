@@ -1,0 +1,12 @@
+/target/
+/.env.local
+/.downloads/
+/.m2/
+/.maven/
+/.run/
+*.log
+.idea/
+*.iml
+.classpath
+.project
+.settings/

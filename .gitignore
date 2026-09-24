@@ -1,0 +1,34 @@
+# ignore root env
+
+.env
+ops/env/.env.dev
+ops/env/.env.prod
+
+# Local reference backend: intentionally excluded from version control
+/be/src/
+
+# Local credentials and authenticated API scratch files
+/be/config/config.json
+/test-api/api.http
+/test-api/product.http
+/test-api/test-orders.js
+
+# Secrets and machine-specific environment files
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# Dependencies, build output and runtime data
+node_modules/
+dist/
+logs/
+*.log
+/uploads/
+*.dump
+*.custom
+
+# Operating system files
+.DS_Store
+Thumbs.db

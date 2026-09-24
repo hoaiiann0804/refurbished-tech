@@ -1,0 +1,17 @@
+#Node Modules
+node_modules/
+
+#Environment variables
+.env
+.env.development
+
+# Dependency caches
+npm-debug.log*
+
+# OS system files
+.DS_Store
+Thumbs.db
+
+# Vite build output
+dist/
+build/

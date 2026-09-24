@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:55433/refurbished_test
+    username: refurbished_test
+    password: ${REFURBISHED_TEST_PASSWORD:}
+app:
+  security:
+    permit-all-for-tests: true
+    jwt:
+      secret: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
