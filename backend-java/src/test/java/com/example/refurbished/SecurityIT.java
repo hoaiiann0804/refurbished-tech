@@ -86,7 +86,7 @@ class SecurityIT {
 
     @Test
     void migrationV5AndAuthenticationAreActive() {
-        assertEquals("8", flyway.info().current().getVersion().getVersion());
+        assertEquals("11", flyway.info().current().getVersion().getVersion());
 
         ResponseEntity<JsonNode> unauthenticated = http.postForEntity("/api/device-units",
                 Map.of(), JsonNode.class);
