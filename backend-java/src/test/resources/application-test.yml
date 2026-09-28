@@ -3,7 +3,15 @@ spring:
     url: jdbc:postgresql://127.0.0.1:55433/refurbished_test
     username: refurbished_test
     password: ${REFURBISHED_TEST_PASSWORD:}
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
 app:
+  online:
+    expiry-enabled: false
   security:
     permit-all-for-tests: true
     jwt:

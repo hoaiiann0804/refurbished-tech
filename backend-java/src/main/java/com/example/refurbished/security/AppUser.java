@@ -36,6 +36,35 @@ public class AppUser {
     @Column(nullable = false)
     private boolean enabled;
 
+    @Column(name = "token_version", nullable = false)
+    private long tokenVersion;
+
+    // Tư duy nghiệp vụ: đổi mật khẩu phải thu hồi phiên cũ, không chỉ thay hash.
+    public void changePassword(String encodedPassword) {
+        this.passwordHash = encodedPassword;
+        revokeSessions();
+    }
+
+    public void updateStatus(boolean enabled) {
+        if (this.enabled != enabled) {
+            this.enabled = enabled;
+            revokeSessions();
+        }
+    }
+
+    public void updateRole(UserRole role) {
+        if (role == null) {
+            throw new IllegalArgumentException("Role cannot be null.");
+        }
+        if (this.role != role) {
+            this.role = role;
+            revokeSessions();
+        }
+    }
+
+    public void revokeSessions() { tokenVersion = Math.addExact(tokenVersion, 1); }
+    public long getTokenVersion() { return tokenVersion; }
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

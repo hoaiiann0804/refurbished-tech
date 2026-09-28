@@ -4,6 +4,16 @@ import com.example.refurbished.security.AppUser;
 import com.example.refurbished.security.AppUserRepository;
 import com.example.refurbished.security.OAuthCodeService;
 import com.example.refurbished.security.UserRole;
+import com.example.refurbished.security.LocalAdminRecovery;
+import org.springframework.boot.DefaultApplicationArguments;
+import org.springframework.context.ApplicationContext;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Map;
 import java.util.UUID;
@@ -30,6 +40,8 @@ import org.springframework.test.context.ActiveProfiles;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
@@ -44,6 +56,11 @@ class SecurityIT {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwords;
     @Autowired private OAuthCodeService oauthCodes;
+    @Autowired private DataSource dataSource;
+    @Autowired private PlatformTransactionManager transactions;
+    @Autowired private ApplicationContext context;
+    @Autowired private com.example.refurbished.audit.AuditService audit;
+    @Autowired private org.springframework.security.oauth2.jwt.JwtEncoder encoder;
     @LocalServerPort private int port;
 
     private AppUser admin;
@@ -60,6 +77,8 @@ class SecurityIT {
 
     @AfterEach
     void cleanupOwnedSecurityFixtures() {
+        jdbc.update("DELETE FROM audit_events WHERE actor_user_id IN (?, ?) OR target_id IN (?, ?)",
+                admin.getId(), staff.getId(), admin.getId(), staff.getId());
         jdbc.update("DELETE FROM oauth_login_codes WHERE user_id IN (?, ?)", admin.getId(), staff.getId());
         users.deleteAllById(java.util.List.of(admin.getId(), staff.getId()));
         users.flush();
@@ -67,7 +86,7 @@ class SecurityIT {
 
     @Test
     void migrationV5AndAuthenticationAreActive() {
-        assertEquals("5", flyway.info().current().getVersion().getVersion());
+        assertEquals("8", flyway.info().current().getVersion().getVersion());
 
         ResponseEntity<JsonNode> unauthenticated = http.postForEntity("/api/device-units",
                 Map.of(), JsonNode.class);
@@ -145,6 +164,184 @@ class SecurityIT {
 
     private ResponseEntity<JsonNode> login(String email, String password) {
         return http.postForEntity("/api/auth/login", Map.of("email", email, "password", password), JsonNode.class);
+    }
+
+    @Test
+    void swaggerIsPublicButBusinessEndpointsRemainProtected() {
+        ResponseEntity<String> ui = http.getForEntity("/swagger-ui/index.html", String.class);
+        assertEquals(HttpStatus.OK, ui.getStatusCode());
+        assertTrue(ui.getBody().contains("swagger-ui"));
+        assertEquals(HttpStatus.OK, http.getForEntity("/swagger-ui/swagger-ui-bundle.js", String.class).getStatusCode());
+        assertEquals(HttpStatus.OK, http.getForEntity("/v3/api-docs/swagger-config", JsonNode.class).getStatusCode());
+        ResponseEntity<JsonNode> response = http.getForEntity("/v3/api-docs", JsonNode.class);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        JsonNode spec = response.getBody();
+        assertEquals("bearer", spec.at("/components/securitySchemes/bearerAuth/scheme").asText());
+        assertTrue(spec.at("/security/0").has("bearerAuth"));
+        JsonNode paths = spec.get("paths");
+        for (String path : List.of("/api/auth/login", "/api/auth/me", "/api/auth/change-password",
+                "/api/auth/logout-all", "/api/auth/oauth/exchange", "/api/users", "/api/products",
+                "/api/products/{id}", "/api/device-units", "/api/device-units/{id}",
+                "/api/device-units/{id}/start-inspection", "/api/device-units/{id}/complete-inspection",
+                "/api/orders/checkout", "/api/orders/{id}", "/api/warranties", "/api/warranties/{id}",
+                "/api/warranties/device-unit/{deviceUnitId}", "/api/health")) {
+            assertTrue(paths.has(path), "Missing documented API: " + path);
+        }
+        assertEquals(0, paths.get("/api/auth/login").get("post").get("security").size());
+        assertEquals(0, paths.get("/api/products").get("get").get("security").size());
+        assertTrue(paths.get("/api/auth/me").get("get").path("parameters").isMissingNode()
+                || paths.get("/api/auth/me").get("get").get("parameters").isEmpty());
+        assertEquals(HttpStatus.UNAUTHORIZED, http.getForEntity("/api/device-units", JsonNode.class).getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, http.postForEntity("/api/users", Map.of(), JsonNode.class).getStatusCode());
+    }
+
+    @Test
+    void changingPasswordRevokesAllOldTokensAndPendingGoogleCodes() {
+        String first = token(login("admin@test.local", "AdminPassword123!"));
+        String second = token(login("admin@test.local", "AdminPassword123!"));
+        String code = oauthCodes.issue(admin);
+        assertEquals(HttpStatus.NO_CONTENT, postWithToken("/api/auth/change-password", Map.of(
+                "currentPassword", "AdminPassword123!", "newPassword", "UpdatedPassword123!"), first).getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, getWithToken("/api/auth/me", first).getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, getWithToken("/api/auth/me", second).getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, login("admin@test.local", "AdminPassword123!").getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, http.postForEntity("/api/auth/oauth/exchange",
+                Map.of("code", code), JsonNode.class).getStatusCode());
+        String fresh = token(login("admin@test.local", "UpdatedPassword123!"));
+        assertEquals(HttpStatus.OK, getWithToken("/api/auth/me", fresh).getStatusCode());
+    }
+
+    @Test
+    void invalidPasswordChangeDoesNotRevokeSessionOrChangeCredentials() {
+        String access = token(login("staff@test.local", "StaffPassword123!"));
+        assertEquals(HttpStatus.UNAUTHORIZED, postWithToken("/api/auth/change-password", Map.of(
+                "currentPassword", "wrong", "newPassword", "UpdatedPassword123!"), access).getStatusCode());
+        assertEquals(HttpStatus.CONFLICT, postWithToken("/api/auth/change-password", Map.of(
+                "currentPassword", "StaffPassword123!", "newPassword", "StaffPassword123!"), access).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, postWithToken("/api/auth/change-password", Map.of(
+                "currentPassword", "StaffPassword123!", "newPassword", "short"), access).getStatusCode());
+        assertEquals(HttpStatus.CONFLICT, postWithToken("/api/auth/change-password", Map.of(
+                "currentPassword", "StaffPassword123!", "newPassword", "ậ".repeat(25)), access).getStatusCode());
+        assertEquals(HttpStatus.OK, getWithToken("/api/auth/me", access).getStatusCode());
+        assertEquals(HttpStatus.OK, login("staff@test.local", "StaffPassword123!").getStatusCode());
+    }
+
+    @Test
+    void logoutAllRevokesStaffSessionsButAllowsFreshLogin() {
+        String access = token(login("staff@test.local", "StaffPassword123!"));
+        assertEquals(HttpStatus.NO_CONTENT, postWithToken("/api/auth/logout-all", null, access).getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, getWithToken("/api/auth/me", access).getStatusCode());
+        assertEquals(HttpStatus.OK, login("staff@test.local", "StaffPassword123!").getStatusCode());
+    }
+
+    @Test
+    void disabledAccountCannotUseExistingJwtOrExchangeGoogleCode() {
+        String access = token(login("staff@test.local", "StaffPassword123!"));
+        String code = oauthCodes.issue(staff);
+        jdbc.update("UPDATE app_users SET enabled=false WHERE id=?", staff.getId());
+        assertEquals(HttpStatus.UNAUTHORIZED, getWithToken("/api/auth/me", access).getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, http.postForEntity("/api/auth/oauth/exchange",
+                Map.of("code", code), JsonNode.class).getStatusCode());
+    }
+
+    @Test
+    void changedRoleInvalidatesPreviouslyIssuedJwt() {
+        String access = token(login("admin@test.local", "AdminPassword123!"));
+        jdbc.update("UPDATE app_users SET role='STAFF' WHERE id=?", admin.getId());
+        assertEquals(HttpStatus.UNAUTHORIZED, getWithToken("/api/auth/me", access).getStatusCode());
+    }
+
+    @Test
+    void legacyAndMalformedSessionVersionsAreRejectedEvenWithValidSignature() {
+        for (Object version : List.of("missing", "0", 0.5)) {
+            var claims = org.springframework.security.oauth2.jwt.JwtClaimsSet.builder()
+                    .issuer("refurbished-backend").subject(admin.getId().toString())
+                    .issuedAt(java.time.Instant.now()).expiresAt(java.time.Instant.now().plusSeconds(60))
+                    .claim("role", "ADMIN").claim("email", admin.getEmail());
+            if (!version.equals("missing")) claims.claim("ver", version);
+            var header = org.springframework.security.oauth2.jwt.JwsHeader
+                    .with(org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS256).build();
+            String access = encoder.encode(org.springframework.security.oauth2.jwt.JwtEncoderParameters
+                    .from(header, claims.build())).getTokenValue();
+            assertEquals(HttpStatus.UNAUTHORIZED, getWithToken("/api/auth/me", access).getStatusCode());
+        }
+    }
+
+    @Test
+    void localRecoveryChangesOnlyExistingEnabledAdminAndRevokesSessions() {
+        // Không kích hoạt dev/database dev trong test. Gọi runner trong transaction
+        // test để kiểm chứng nghiệp vụ bằng fixture, không đặt lại ADMIN thật.
+        assertTrue(context.getBeansOfType(LocalAdminRecovery.class).isEmpty());
+        String access = token(login("admin@test.local", "AdminPassword123!"));
+        String code = oauthCodes.issue(admin);
+        recover(" ADMIN@TEST.LOCAL ", "RecoveredPassword123!");
+        AppUser recovered = users.findById(admin.getId()).orElseThrow();
+        assertEquals(admin.getId(), recovered.getId());
+        assertEquals(UserRole.ADMIN, recovered.getRole());
+        assertTrue(recovered.isEnabled());
+        assertEquals(1, recovered.getTokenVersion());
+        assertEquals(HttpStatus.OK, login("admin@test.local", "RecoveredPassword123!").getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, getWithToken("/api/auth/me", access).getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, http.postForEntity("/api/auth/oauth/exchange",
+                Map.of("code", code), JsonNode.class).getStatusCode());
+    }
+
+    @Test
+    void recoveryRejectsStaffDisabledAndMissingUsersWithoutMutation() {
+        long count = users.count();
+        assertThrows(IllegalStateException.class, () -> recover("missing@test.local", "RecoveredPassword123!"));
+        assertThrows(IllegalStateException.class, () -> recover("staff@test.local", "RecoveredPassword123!"));
+        jdbc.update("UPDATE app_users SET enabled=false WHERE id=?", admin.getId());
+        assertThrows(IllegalStateException.class, () -> recover("admin@test.local", "RecoveredPassword123!"));
+        assertEquals(count, users.count());
+        AppUser unchanged = users.findById(admin.getId()).orElseThrow();
+        assertEquals(0, unchanged.getTokenVersion());
+        assertTrue(passwords.matches("AdminPassword123!", unchanged.getPasswordHash()));
+        assertEquals(HttpStatus.OK, login("staff@test.local", "StaffPassword123!").getStatusCode());
+    }
+
+    private void recover(String email, String password) {
+        new TransactionTemplate(transactions).executeWithoutResult(status ->
+                new LocalAdminRecovery(users, passwords, audit, email, password).run(new DefaultApplicationArguments()));
+    }
+
+    @Test
+    void concurrentPasswordChangesAllowExactlyOneWinner() throws Exception {
+        String access = token(login("staff@test.local", "StaffPassword123!"));
+        var executor = Executors.newFixedThreadPool(2);
+        try (Connection blocker = dataSource.getConnection()) {
+            blocker.setAutoCommit(false);
+            try (var statement = blocker.prepareStatement("SELECT id FROM app_users WHERE id=? FOR UPDATE")) {
+                statement.setObject(1, staff.getId());
+                assertTrue(statement.executeQuery().next());
+            }
+            var first = executor.submit(() -> postWithToken("/api/auth/change-password", Map.of(
+                    "currentPassword", "StaffPassword123!", "newPassword", "FirstNewPassword123!"), access));
+            var second = executor.submit(() -> postWithToken("/api/auth/change-password", Map.of(
+                    "currentPassword", "StaffPassword123!", "newPassword", "SecondNewPassword123!"), access));
+            // Bằng chứng cạnh tranh thực: cả hai request phải chờ row lock trên PostgreSQL.
+            boolean waiting = false;
+            for (int attempt = 0; attempt < 100; attempt++) {
+                int count = jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity "
+                        + "WHERE datname=current_database() AND usename=current_user "
+                        + "AND state='active' AND wait_event_type='Lock'", Integer.class);
+                if (count >= 2) { waiting = true; break; }
+                Thread.sleep(50);
+            }
+            assertTrue(waiting, "Both password changes must reach the database row lock.");
+            blocker.commit();
+            var results = List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS));
+            assertEquals(1, results.stream().filter(r -> r.getStatusCode() == HttpStatus.NO_CONTENT).count());
+            assertEquals(1, results.stream().filter(r -> r.getStatusCode() == HttpStatus.UNAUTHORIZED).count());
+            assertEquals(1, users.findById(staff.getId()).orElseThrow().getTokenVersion());
+            long successfulLogins = List.of(login("staff@test.local", "FirstNewPassword123!"),
+                    login("staff@test.local", "SecondNewPassword123!")).stream()
+                    .filter(r -> r.getStatusCode() == HttpStatus.OK).count();
+            assertEquals(1, successfulLogins);
+        } finally {
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+        }
     }
 
     private String token(ResponseEntity<JsonNode> response) {

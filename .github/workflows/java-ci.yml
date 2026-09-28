@@ -1,0 +1,63 @@
+name: Java backend
+on:
+  push:
+    paths: ['backend-java/**', '.github/workflows/java-ci.yml']
+  pull_request:
+    paths: ['backend-java/**', '.github/workflows/java-ci.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend-java
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend-java/pom.xml
+      - name: Isolated test credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in REFURBISHED_DEV_ADMIN_PASSWORD REFURBISHED_DEV_PASSWORD REFURBISHED_TEST_ADMIN_PASSWORD REFURBISHED_TEST_PASSWORD REFURBISHED_JWT_SECRET; do
+            value=$(openssl rand -hex 32)
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+      - name: PostgreSQL test only
+        run: docker compose -f compose.local.yml up -d --wait db-test
+      - name: Browser and Postman acceptance tools
+        run: |
+          npm install --prefix .run/browser-runner --no-save --package-lock=false --ignore-scripts playwright@1.58.2
+          npm install --prefix .run/postman-runner --no-save --package-lock=false --ignore-scripts newman@6.2.1
+          node .run/browser-runner/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Verify Java and embedded admin UI syntax
+        env:
+          REFURBISHED_RUN_BROWSER: 'true'
+          REFURBISHED_RUN_POSTMAN: 'true'
+        run: |
+          node --check src/main/resources/static/admin/app.js
+          bash mvnw --batch-mode --no-transfer-progress verify
+      - name: Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-test-reports
+          path: |
+            backend-java/target/surefire-reports/*.xml
+            backend-java/target/failsafe-reports/*.xml
+      - name: Application
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-application
+          path: backend-java/target/refurbished-backend-0.0.1-SNAPSHOT.jar
+      - name: Stop isolated database
+        if: always()
+        run: docker compose -f compose.local.yml down

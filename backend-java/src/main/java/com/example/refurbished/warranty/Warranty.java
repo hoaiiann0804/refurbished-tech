@@ -63,6 +63,10 @@ public class Warranty {
         createdAt = Instant.now();
     }
 
+    public boolean isExpired() {
+        return LocalDate.now(java.time.ZoneOffset.UTC).isAfter(endsOn);
+    }
+
     public UUID getId() { return id; }
     public DeviceUnit getDeviceUnit() { return deviceUnit; }
     public int getDurationMonths() { return durationMonths; }

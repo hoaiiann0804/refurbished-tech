@@ -1,5 +1,8 @@
 package com.example.refurbished.common.exception;
 
+import org.springframework.validation.method.ParameterErrors;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -39,6 +42,12 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(new ApiError("NOT_FOUND", exception.getMessage(), Map.of()));
     }
 
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiError> rateLimitExceeded(RateLimitExceededException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(new ApiError("RATE_LIMIT_EXCEEDED", exception.getMessage(), Map.of()));
+    }
+
     @ExceptionHandler(BusinessConflictException.class)
     public ResponseEntity<ApiError> conflict(BusinessConflictException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -58,6 +67,27 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         Map<String, String> fields = new LinkedHashMap<>();
         exception.getBindingResult().getFieldErrors()
                 .forEach(error -> fields.putIfAbsent(error.getField(), error.getDefaultMessage()));
+        return new ResponseEntity<>(new ApiError("VALIDATION_ERROR", "Request validation failed.", fields),
+                headers, status);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHandlerMethodValidationException(
+            HandlerMethodValidationException exception,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        // Khi header cũng có constraint, Spring chuyển validation toàn method sang
+        // handler này. Giữ hợp đồng VALIDATION_ERROR cho body của client hiện hữu.
+        if (exception.isForReturnValue()) return handleExceptionInternal(exception, null, headers, status, request);
+        Map<String, String> fields = new LinkedHashMap<>();
+        exception.getParameterValidationResults().forEach(result -> {
+            if (result instanceof ParameterErrors errors) {
+                errors.getFieldErrors().forEach(error -> fields.putIfAbsent(error.getField(), error.getDefaultMessage()));
+            } else {
+                String name = result.getMethodParameter().getParameterName();
+                result.getResolvableErrors().forEach(error -> fields.putIfAbsent(
+                        name == null ? "parameter" : name, error.getDefaultMessage()));
+            }
+        });
         return new ResponseEntity<>(new ApiError("VALIDATION_ERROR", "Request validation failed.", fields),
                 headers, status);
     }

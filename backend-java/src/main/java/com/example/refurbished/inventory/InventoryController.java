@@ -1,5 +1,7 @@
 package com.example.refurbished.inventory;
 
+import jakarta.validation.constraints.Size;
+
 import com.example.refurbished.common.api.PageResponse;
 import com.example.refurbished.inventory.dto.CreateDeviceUnitRequest;
 import com.example.refurbished.inventory.dto.CompleteInspectionRequest;
@@ -50,11 +52,22 @@ public class InventoryController {
         return service.completeInspection(id, request);
     }
 
+    @PostMapping("/{id}/send-to-repair")
+    public DeviceUnitResponse sendToRepair(@PathVariable UUID id) {
+        return service.sendToRepair(id);
+    }
+
+    @GetMapping("/{id}/inspections")
+    public java.util.List<com.example.refurbished.inventory.dto.InspectionResponse> getInspections(@PathVariable UUID id) {
+        return service.getInspections(id);
+    }
+
     @GetMapping
     public PageResponse<DeviceUnitResponse> list(@RequestParam(required = false) UUID productId,
             @RequestParam(required = false) DeviceStatus status,
+            @RequestParam(required = false) @Size(max = 100) String serialNumber,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return service.list(productId, status, page, size);
+        return service.list(productId, status, serialNumber, page, size);
     }
 }

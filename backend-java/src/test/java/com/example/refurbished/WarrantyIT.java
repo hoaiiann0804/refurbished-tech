@@ -48,9 +48,12 @@ class WarrantyIT {
         }
         for (UUID orderId : createdOrders) {
             jdbc.update("DELETE FROM order_items WHERE order_id = ?", orderId);
+            jdbc.update("DELETE FROM audit_events WHERE target_id=?", orderId);
             jdbc.update("DELETE FROM sales_orders WHERE id = ?", orderId);
         }
         for (UUID productId : createdProducts) {
+            jdbc.update("DELETE FROM audit_events WHERE target_id IN (SELECT id FROM device_units WHERE product_id=?)", productId);
+            jdbc.update("DELETE FROM audit_events WHERE target_id=?", productId);
             jdbc.update("DELETE FROM device_units WHERE product_id = ?", productId);
             jdbc.update("DELETE FROM products WHERE id = ?", productId);
         }

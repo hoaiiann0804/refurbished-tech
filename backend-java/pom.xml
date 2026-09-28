@@ -16,8 +16,23 @@
     <description>Development foundation for individual refurbished device inventory and sales</description>
     <properties>
         <java.version>21</java.version>
+           <!-- Security override: Tomcat CVE fixes -->
+        <!-- <tomcat.version>10.1.58</tomcat.version> -->
     </properties>
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.8.16</version>
+        </dependency>
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>

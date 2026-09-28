@@ -12,6 +12,7 @@ import org.springframework.core.env.Environment;
  * Validate the effective settings before constructing a connection pool.
  */
 @Configuration(proxyBeanMethods = false)
+@org.springframework.context.annotation.Profile("!staging")
 @EnableConfigurationProperties(DataSourceProperties.class)
 public class LocalDataSourceConfiguration {
 

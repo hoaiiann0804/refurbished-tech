@@ -1,5 +1,5 @@
 package com.example.refurbished.inventory;
 
 public enum DeviceStatus {
-    RECEIVED, INSPECTING, AVAILABLE, RESERVED, SOLD, REJECTED
+    RECEIVED, INSPECTING, AVAILABLE, RESERVED, SOLD, REJECTED, IN_REPAIR
 }

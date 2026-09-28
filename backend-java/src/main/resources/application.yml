@@ -24,6 +24,38 @@ server:
     include-message: never
     include-stacktrace: never
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"
+
+# Tài liệu tương tác dùng để thử API local; không tự bật ở môi trường mới.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+    persist-authorization: false
+    tags-sorter: alpha
+    operations-sorter: alpha
+    disable-swagger-default-url: true
+  paths-to-match: /api/**
+
 app:
   security:
     jwt:

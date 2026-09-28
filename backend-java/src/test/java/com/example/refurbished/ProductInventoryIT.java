@@ -50,6 +50,8 @@ class ProductInventoryIT {
     void removeOnlyFixturesCreatedByThisTest() {
         assertEquals("refurbished_test", jdbc.queryForObject("SELECT current_database()", String.class));
         for (UUID id : createdProducts) {
+            jdbc.update("DELETE FROM audit_events WHERE target_id IN (SELECT id FROM device_units WHERE product_id=?)", id);
+            jdbc.update("DELETE FROM audit_events WHERE target_id=?", id);
             jdbc.update("DELETE FROM device_units WHERE product_id = ?", id);
             jdbc.update("DELETE FROM products WHERE id = ?", id);
         }

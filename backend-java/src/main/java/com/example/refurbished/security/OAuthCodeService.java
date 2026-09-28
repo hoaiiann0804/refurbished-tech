@@ -16,11 +16,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class OAuthCodeService {
     private final OAuthLoginCodeRepository codes;
     private final JwtService tokens;
+    private final AppUserRepository users;
     private final SecureRandom random = new SecureRandom();
 
-    public OAuthCodeService(OAuthLoginCodeRepository codes, JwtService tokens) {
+    public OAuthCodeService(OAuthLoginCodeRepository codes, JwtService tokens, AppUserRepository users) {
         this.codes = codes;
         this.tokens = tokens;
+        this.users = users;
     }
 
     @Transactional
@@ -41,7 +43,13 @@ public class OAuthCodeService {
         } catch (IllegalStateException exception) {
             throw new AuthenticationFailedException(exception.getMessage());
         }
-        return tokens.issue(code.getUser());
+        AppUser user = users.findByIdForUpdate(code.getUser().getId())
+                .orElseThrow(() -> new AuthenticationFailedException("Account is unavailable."));
+        // Code một lần cũng phải bị thu hồi cùng JWT khi đổi mật khẩu/logout-all.
+        if (!user.isEnabled() || code.getTokenVersion() != user.getTokenVersion()) {
+            throw new AuthenticationFailedException("OAuth login code is revoked.");
+        }
+        return tokens.issue(user);
     }
 
     private String hash(String value) {

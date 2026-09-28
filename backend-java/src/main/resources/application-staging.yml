@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://db:5432/refurbished_staging
+    username: refurbished_staging
+    password: ${REFURBISHED_STAGING_PASSWORD:}
+server:
+  address: 0.0.0.0
+  shutdown: graceful
+app:
+  online:
+    sandbox-enabled: false

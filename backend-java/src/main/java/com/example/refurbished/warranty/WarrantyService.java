@@ -1,5 +1,8 @@
 package com.example.refurbished.warranty;
 
+import com.example.refurbished.audit.AuditService;
+import java.util.Map;
+
 import com.example.refurbished.common.exception.BusinessConflictException;
 import com.example.refurbished.common.exception.ResourceNotFoundException;
 import com.example.refurbished.inventory.DeviceStatus;
@@ -19,10 +22,12 @@ public class WarrantyService {
 
     private final WarrantyRepository warranties;
     private final DeviceUnitRepository devices;
+    private final AuditService audit;
 
-    public WarrantyService(WarrantyRepository warranties, DeviceUnitRepository devices) {
+    public WarrantyService(WarrantyRepository warranties, DeviceUnitRepository devices, AuditService audit) {
         this.warranties = warranties;
         this.devices = devices;
+        this.audit = audit;
     }
 
     @Transactional
@@ -37,7 +42,9 @@ public class WarrantyService {
         }
 
         Warranty warranty = new Warranty(device, request.durationMonths(), LocalDate.now(ZoneOffset.UTC));
-        return WarrantyResponse.from(warranties.saveAndFlush(warranty));
+        warranties.saveAndFlush(warranty);
+        audit.record("WARRANTY_ISSUED", "DEVICE_UNIT", device.getId(), Map.of("warrantyId", warranty.getId(), "durationMonths", request.durationMonths()));
+        return WarrantyResponse.from(warranty);
     }
 
     public WarrantyResponse get(UUID id) {

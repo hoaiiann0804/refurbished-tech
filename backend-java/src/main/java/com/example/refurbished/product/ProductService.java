@@ -1,5 +1,8 @@
 package com.example.refurbished.product;
 
+import com.example.refurbished.audit.AuditService;
+import java.util.Map;
+
 import com.example.refurbished.common.api.PageResponse;
 import com.example.refurbished.common.exception.ResourceNotFoundException;
 import com.example.refurbished.product.dto.CreateProductRequest;
@@ -17,16 +20,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProductService {
 
     private final ProductRepository repository;
+    private final AuditService audit;
 
-    public ProductService(ProductRepository repository) {
+    public ProductService(ProductRepository repository, AuditService audit) {
         this.repository = repository;
+        this.audit = audit;
     }
 
     @Transactional
     public ProductResponse create(CreateProductRequest request) {
         Product product = new Product(request.modelCode(), request.name(), request.brand(),
                 request.specificationSummary(), request.active() == null || request.active());
-        return ProductResponse.from(repository.saveAndFlush(product));
+        repository.saveAndFlush(product);
+        audit.record("PRODUCT_CREATED", "PRODUCT", product.getId(), Map.of("modelCode", product.getModelCode()));
+        return ProductResponse.from(product);
     }
 
     public ProductResponse get(UUID id) {
@@ -47,6 +54,7 @@ public class ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found."));
         product.updateDetails(request.name(), request.brand(), request.specificationSummary(), request.active());
         repository.flush();
+        audit.record("PRODUCT_UPDATED", "PRODUCT", id, Map.of("active", product.isActive()));
         return ProductResponse.from(product);
     }
 }

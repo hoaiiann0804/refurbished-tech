@@ -53,10 +53,12 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    JwtDecoder jwtDecoder(SecretKey key, @Value("${app.security.jwt.issuer}") String issuer) {
+    JwtDecoder jwtDecoder(SecretKey key, @Value("${app.security.jwt.issuer}") String issuer,
+            AccountTokenValidator accounts) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(key)
                 .macAlgorithm(MacAlgorithm.HS256).build();
-        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
+        decoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefaultWithIssuer(issuer), accounts));
         return decoder;
     }
 
@@ -64,7 +66,12 @@ public class SecurityConfiguration {
     SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper mapper,
             GoogleOAuthSuccessHandler googleSuccess,
             ObjectProvider<ClientRegistrationRepository> registrations,
+            org.springframework.core.env.Environment environment,
             @Value("${app.security.permit-all-for-tests:false}") boolean permitAllTests) throws Exception {
+        // Không cho một biến môi trường vô tình tắt authorization ở môi trường dev.
+        if (permitAllTests && !java.util.Arrays.equals(environment.getActiveProfiles(), new String[]{"test"})) {
+            throw new IllegalStateException("Security bypass is allowed only with the test profile.");
+        }
         http.csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
@@ -77,16 +84,24 @@ public class SecurityConfiguration {
         if (permitAllTests) {
             http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         } else {
+            // Chỉ mở trang tài liệu khi bật OpenAPI; quyền của API vẫn do matcher phía dưới quyết định.
+            if (environment.getProperty("springdoc.api-docs.enabled", Boolean.class, false)) {
+                http.authorizeHttpRequests(auth -> auth.requestMatchers(HttpMethod.GET,
+                        "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**", "/v3/api-docs.yaml").permitAll());
+            }
             http.authorizeHttpRequests(auth -> auth
+                    .requestMatchers(HttpMethod.GET, "/admin/**", "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
+                    .requestMatchers("/actuator/**").hasRole("ADMIN")
+                    .requestMatchers("/api/online/reservations/{id}/sandbox-payment", "/api/online/reservations/{id}/sandbox-refund").hasRole("ADMIN")
                     .requestMatchers("/api/health", "/api/auth/login", "/api/auth/oauth/exchange",
                             "/oauth2/**", "/login/oauth2/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/products/**").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("ADMIN")
-                    .requestMatchers("/api/users/**").hasRole("ADMIN")
+                    .requestMatchers("/api/users/**", "/api/audit-events/**").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/device-units/**", "/api/orders/**",
                             "/api/warranties/**").hasAnyRole("ADMIN", "STAFF")
-                    .anyRequest().authenticated());
+                    .anyRequest().hasAnyRole("ADMIN", "STAFF"));
         }
 
         http.oauth2ResourceServer(resource -> resource.jwt(jwt -> jwt.jwtAuthenticationConverter(token -> {
@@ -103,9 +118,10 @@ public class SecurityConfiguration {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://127.0.0.1:5173", "http://localhost:5173"));
+        config.setAllowedOrigins(List.of("http://127.0.0.1:5174", "http://localhost:5174"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"));
+        config.setExposedHeaders(List.of("X-Request-ID"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
