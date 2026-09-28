@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="vi">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Refurbished · Vận hành</title><link rel="stylesheet" href="./style.css"></head>
+<body>
+<section id="login" class="login"><div class="login-copy"><p class="eyebrow">REFURBISHED TECH / OPERATIONS</p><h1>Mỗi chiếc máy.<br>Một hành trình rõ ràng.</h1><p>Quản lý từ lúc nhập kho đến khi bàn giao, theo đúng serial và lịch sử thực tế.</p><div class="steps">01 Nhập kho <span>→</span> 02 Kiểm định <span>→</span> 03 Bàn giao</div></div><form id="login-form" class="card"><p class="eyebrow">DÀNH CHO NHÂN VIÊN</p><h2>Đăng nhập vận hành</h2><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Mật khẩu<input name="password" type="password" autocomplete="current-password" required></label><button>Đăng nhập</button><p class="muted">Phiên làm việc được giữ trong bộ nhớ. Tải lại trang cần đăng nhập lại.</p></form></section>
+<div id="workspace" hidden><aside><a class="brand" href="#products">refurbished<span>TECH / OPERATIONS</span></a><nav aria-label="Điều hướng chính"></nav><div class="identity"><strong id="identity"></strong><button id="logout" class="secondary">Thoát phiên này</button></div></aside><main><header><div><p class="eyebrow">KHÔNG GIAN VẬN HÀNH</p><h1 id="title"></h1></div><button id="refresh" class="secondary">Làm mới dữ liệu</button></header><div id="content"></div></main></div>
+<div id="notice" role="status" aria-live="polite" hidden></div>
+<dialog id="detail"><button id="close-dialog" class="secondary">Đóng</button><div id="detail-content"></div></dialog>
+<script type="module" src="./app.js"></script></body></html>

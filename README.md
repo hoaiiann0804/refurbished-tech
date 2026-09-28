@@ -1,5 +1,14 @@
 # Refurbished Device Inventory & Sales Platform
 
+> Bước 2 đã triển khai: danh sách đơn, tìm serial, audit, checkout idempotency và
+> [collection Postman](backend-java/postman/README.md). Xem [hợp đồng và nghiệm thu mới nhất](backend-java/docs/STEP-2-OPERATIONS.md).
+> UI quản trị Java và CI/vận hành vẫn thuộc các bước kế tiếp.
+
+> Cập nhật 2026-09-25: [Bước 1A — đổi mật khẩu, logout-all và recovery ADMIN local](backend-java/docs/STEP-1A-ACCOUNTS.md)
+> đã kiểm thử với 85 tests PASS. Migration V6 áp dụng trên database test; dev sẽ được
+> migrate khi khởi động JAR mới. Các số liệu Phase 10 bên dưới là mốc lịch sử trước nâng cấp.
+> Xem [kế hoạch](PLAN.md) và [sơ đồ workflow/dữ liệu](docs/planning/README.md).
+
 Java/Spring Boot backend quản lý từng thiết bị refurbished vật lý theo serial number,
 quy trình kiểm định, bán hàng an toàn khi có request đồng thời và bảo hành theo thiết
 bị. Project được xây trong migration workspace từ bài học của backend Node.js cũ;
@@ -10,7 +19,8 @@ bị. Project được xây trong migration workspace từ bài học của back
 | Phạm vi | Trạng thái |
 |---|---|
 | Core Java backend, Phase 0–8 | IMPLEMENTED |
-| Unit/integration tests trên PostgreSQL local | TESTED — 73 tests pass |
+| Unit/integration tests trên PostgreSQL local | TESTED — 92 tests pass, gồm Newman acceptance |
+| API vận hành bước 2 và Postman | IMPLEMENTED, TESTED local |
 | Packaged JAR startup và health check | TESTED local |
 | Concurrent checkout: hai request, đúng một sale | TESTED local |
 | Optional feature assessment, Phase 9 | COMPLETED |

@@ -32,6 +32,10 @@ public class OAuthLoginCode {
     @Column(name = "used_at")
     private Instant usedAt;
 
+    @Column(name = "token_version", nullable = false, updatable = false)
+    private long tokenVersion;
+    public long getTokenVersion() { return tokenVersion; }
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -40,6 +44,7 @@ public class OAuthLoginCode {
     public OAuthLoginCode(String codeHash, AppUser user, Instant expiresAt) {
         this.codeHash = codeHash;
         this.user = user;
+        this.tokenVersion = user.getTokenVersion();
         this.expiresAt = expiresAt;
     }
 

@@ -1,0 +1,35 @@
+name: refurbished-java-staging
+services:
+  db:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_DB: refurbished_staging
+      POSTGRES_USER: staging_admin
+      POSTGRES_PASSWORD: ${REFURBISHED_STAGING_ADMIN_PASSWORD:?required}
+      APP_DB_USER: refurbished_staging
+      APP_DB_PASSWORD: ${REFURBISHED_STAGING_PASSWORD:?required}
+    volumes:
+      - staging_data:/var/lib/postgresql/data
+      - ./docker/init-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U staging_admin -d refurbished_staging']
+      interval: 3s
+      retries: 20
+  api:
+    build: .
+    environment:
+      REFURBISHED_STAGING_PASSWORD: ${REFURBISHED_STAGING_PASSWORD:?required}
+      REFURBISHED_JWT_SECRET: ${REFURBISHED_STAGING_JWT_SECRET:?required}
+    ports:
+      - '127.0.0.1:18080:8080'
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+volumes:
+  staging_data:

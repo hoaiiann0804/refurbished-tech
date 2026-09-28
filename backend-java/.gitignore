@@ -1,5 +1,6 @@
 /target/
 /.env.local
+/.env.*.local
 /.downloads/
 /.m2/
 /.maven/

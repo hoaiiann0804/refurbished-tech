@@ -1,0 +1,506 @@
+{
+  "info": {
+    "name": "Refurbished Java - Operations",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "01 Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/health",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Each run uses fresh identifiers; retries keep the same checkout key.",
+              "const run = pm.environment.get('fixtureRunId') || pm.variables.replaceIn('{{$guid}}');",
+              "pm.environment.set('runId', run);",
+              "pm.environment.set('checkoutKey', 'postman-' + run);",
+              "['accessToken','productId','deviceUnitId','orderId','warrantyId'].forEach(k => pm.environment.unset(k));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Login ADMIN",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/login",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) pm.environment.set('accessToken', pm.response.json().accessToken);",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Me",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/auth/me"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Create product",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/products",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelCode\": \"PM-{{runId}}\",\n  \"name\": \"Postman demo device\",\n  \"brand\": \"Demo\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) pm.environment.set('productId', pm.response.json().id);",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Receive device",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/device-units",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"serialNumber\": \"PM-{{runId}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) pm.environment.set('deviceUnitId', pm.response.json().id);",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Find serial",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/device-units?serialNumber=pm-{{runId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Serial matches', () => pm.expect(pm.response.json().items[0].id).to.eql(pm.environment.get('deviceUnitId')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Start inspection",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/device-units/{{deviceUnitId}}/start-inspection"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Pass inspection",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/device-units/{{deviceUnitId}}/complete-inspection",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"passed\": true,\n  \"grade\": \"A\",\n  \"batteryHealth\": 90,\n  \"salePrice\": 12500000.25,\n  \"inspectionNotes\": \"Postman demo inspection\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('AVAILABLE', () => pm.expect(pm.response.json().status).to.eql('AVAILABLE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Checkout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{checkoutKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/orders/checkout",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerName\": \"Postman {{runId}}\",\n  \"deviceUnitIds\": [\n    \"{{deviceUnitId}}\"\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) pm.environment.set('orderId', pm.response.json().id);",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Retry checkout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{checkoutKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/orders/checkout",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerName\": \"Postman {{runId}}\",\n  \"deviceUnitIds\": [\n    \"{{deviceUnitId}}\"\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "pm.test('Same order on retry', () => pm.expect(pm.response.json().id).to.eql(pm.environment.get('orderId')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Changed payload conflicts",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{checkoutKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/orders/checkout",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerName\": \"Changed buyer\",\n  \"deviceUnitIds\": [\n    \"{{deviceUnitId}}\"\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 List orders",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/orders?customerName={{runId}}&page=0&size=20"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Exactly one order', () => pm.expect(pm.response.json().totalElements).to.eql(1));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Order details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/orders/{{orderId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Device sold",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/device-units/{{deviceUnitId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('SOLD', () => pm.expect(pm.response.json().status).to.eql('SOLD'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Issue warranty",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/warranties",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"deviceUnitId\": \"{{deviceUnitId}}\",\n  \"durationMonths\": 12\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) pm.environment.set('warrantyId', pm.response.json().id);",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Lookup warranty",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/warranties/device-unit/{{deviceUnitId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Audit device",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/audit-events?targetType=DEVICE_UNIT&targetId={{deviceUnitId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Lifecycle recorded', () => pm.expect(pm.response.json().items.map(e => e.action)).to.include.members(['DEVICE_RECEIVED','INSPECTION_STARTED','INSPECTION_COMPLETED','DEVICE_SOLD','WARRANTY_ISSUED']));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

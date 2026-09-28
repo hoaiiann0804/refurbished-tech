@@ -43,6 +43,8 @@ class DeviceLifecycleIT {
     void removeOnlyOwnedFixtures() {
         assertEquals("refurbished_test", jdbc.queryForObject("SELECT current_database()", String.class));
         for (UUID productId : createdProducts) {
+            jdbc.update("DELETE FROM audit_events WHERE target_id IN (SELECT id FROM device_units WHERE product_id=?)", productId);
+            jdbc.update("DELETE FROM audit_events WHERE target_id=?", productId);
             jdbc.update("DELETE FROM device_units WHERE product_id = ?", productId);
             jdbc.update("DELETE FROM products WHERE id = ?", productId);
         }

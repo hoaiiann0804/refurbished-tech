@@ -1,5 +1,16 @@
 # Refurbished Device Backend — Phase 10 security
 
+Bước 2: [API vận hành, audit và checkout idempotency](docs/STEP-2-OPERATIONS.md),
+kèm [collection Postman và cách chạy](postman/README.md). V7 sẽ được Flyway áp dụng
+khi chạy bản build mới; các số test Phase 10/1A bên dưới là mốc lịch sử.
+
+Swagger UI sau khi chạy JAR mới: http://127.0.0.1:8080/swagger-ui/index.html.
+Xem [hướng dẫn đăng nhập và thử từng API](docs/SWAGGER.md).
+
+> Bước 1A (2026-09-25): đổi mật khẩu, thu hồi phiên và recovery ADMIN local đã có
+> 85 tests PASS. Xem [hướng dẫn mới](docs/STEP-1A-ACCOUNTS.md) trước khi chạy JAR mới
+> và migrate V6. Nội dung Phase 10 bên dưới được giữ làm tài liệu nền.
+
 Đã triển khai Product, DeviceUnit, inspection lifecycle, concurrent checkout,
 Order/OrderItem và Warranty tối thiểu trong migration workspace. Core backend theo
 roadmap Phase 0–8 đã hoàn thành. Phase 10 bổ sung Spring Security, ADMIN/STAFF,

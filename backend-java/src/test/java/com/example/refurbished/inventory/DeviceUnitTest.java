@@ -94,6 +94,39 @@ class DeviceUnitTest {
         assertThrows(BusinessConflictException.class, device::reserveForCheckout);
     }
 
+    @Test
+    void repairWorkflowTransitionsRejectedThroughInRepairToAvailable() {
+        DeviceUnit device = receivedDevice();
+        device.startInspection();
+        device.completeInspection(false, null, null, null, "Defective screen.", null);
+        assertEquals(DeviceStatus.REJECTED, device.getStatus());
+
+        device.sendToRepair();
+        assertEquals(DeviceStatus.IN_REPAIR, device.getStatus());
+
+        device.startInspection();
+        assertEquals(DeviceStatus.INSPECTING, device.getStatus());
+
+        device.completeInspection(true, ConditionGrade.B, 88, new BigDecimal("10500000.00"),
+                "Screen replaced and re-calibrated successfully.", null);
+        assertEquals(DeviceStatus.AVAILABLE, device.getStatus());
+        assertEquals(ConditionGrade.B, device.getGrade());
+        assertEquals(88, device.getBatteryHealth());
+    }
+
+    @Test
+    void cannotSendToRepairFromNonRejectedStatus() {
+        DeviceUnit device = receivedDevice();
+        assertThrows(BusinessConflictException.class, device::sendToRepair);
+
+        device.startInspection();
+        assertThrows(BusinessConflictException.class, device::sendToRepair);
+
+        device.completeInspection(true, ConditionGrade.A, 95, new BigDecimal("15000000.00"),
+                "Passed.", null);
+        assertThrows(BusinessConflictException.class, device::sendToRepair);
+    }
+
     private DeviceUnit receivedDevice() {
         Product product = new Product("MODEL-1", "Model", "Brand", null, true);
         return new DeviceUnit(product, "SERIAL-1", null, null, null);

@@ -1,5 +1,8 @@
 package com.example.refurbished.security;
 
+import com.example.refurbished.audit.AuditService;
+import java.util.Map;
+
 import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
@@ -12,14 +15,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminBootstrap implements ApplicationRunner {
     private final AppUserRepository users;
     private final PasswordEncoder passwords;
+    private final AuditService audit;
     private final String email;
     private final String password;
 
-    public AdminBootstrap(AppUserRepository users, PasswordEncoder passwords,
+    public AdminBootstrap(AppUserRepository users, PasswordEncoder passwords, AuditService audit,
             @Value("${REFURBISHED_BOOTSTRAP_ADMIN_EMAIL:}") String email,
             @Value("${REFURBISHED_BOOTSTRAP_ADMIN_PASSWORD:}") String password) {
         this.users = users;
         this.passwords = passwords;
+        this.audit = audit;
         this.email = email;
         this.password = password;
     }
@@ -33,7 +38,9 @@ public class AdminBootstrap implements ApplicationRunner {
         }
         String normalized = email.trim().toLowerCase(Locale.ROOT);
         if (!users.existsByEmail(normalized)) {
-            users.save(new AppUser(normalized, "Local Administrator", passwords.encode(password), UserRole.ADMIN));
+            PasswordPolicy.validate(password);
+            AppUser user = users.saveAndFlush(new AppUser(normalized, "Local Administrator", passwords.encode(password), UserRole.ADMIN));
+            audit.recordAs(null, "LOCAL_OPERATOR", "ADMIN_BOOTSTRAPPED", "USER", user.getId(), Map.of());
         }
     }
 }
