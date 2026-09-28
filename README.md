@@ -1,12 +1,8 @@
 # Refurbished Device Inventory & Sales Platform
 
-> Bước 2 đã triển khai: danh sách đơn, tìm serial, audit, checkout idempotency và
-> [collection Postman](backend-java/postman/README.md). Xem [hợp đồng và nghiệm thu mới nhất](backend-java/docs/STEP-2-OPERATIONS.md).
-> UI quản trị Java và CI/vận hành vẫn thuộc các bước kế tiếp.
-
-> Cập nhật 2026-09-25: [Bước 1A — đổi mật khẩu, logout-all và recovery ADMIN local](backend-java/docs/STEP-1A-ACCOUNTS.md)
-> đã kiểm thử với 85 tests PASS. Migration V6 áp dụng trên database test; dev sẽ được
-> migrate khi khởi động JAR mới. Các số liệu Phase 10 bên dưới là mốc lịch sử trước nâng cấp.
+> **Cập nhật 2026-09-28**: Đã hoàn thành các bước 1A, 2, 3 và phát hành nhánh
+> `feature/java-backend-enhancements` → merged vào `main`. 85 tests PASS (47 unit + 38 IT).
+> Migrations V1–V11 áp dụng đầy đủ. CI chuyển sang Java-only pipeline.
 > Xem [kế hoạch](PLAN.md) và [sơ đồ workflow/dữ liệu](docs/planning/README.md).
 
 Java/Spring Boot backend quản lý từng thiết bị refurbished vật lý theo serial number,
@@ -18,13 +14,19 @@ bị. Project được xây trong migration workspace từ bài học của back
 
 | Phạm vi | Trạng thái |
 |---|---|
-| Core Java backend, Phase 0–8 | IMPLEMENTED |
-| Unit/integration tests trên PostgreSQL local | TESTED — 92 tests pass, gồm Newman acceptance |
-| API vận hành bước 2 và Postman | IMPLEMENTED, TESTED local |
+| Core Java backend, Phase 0–11 | IMPLEMENTED |
+| Unit/integration tests trên PostgreSQL local | TESTED — 85 tests pass (47 unit, 38 IT), gồm Newman + Browser acceptance |
+| API vận hành bước 2 + Audit + Operations | IMPLEMENTED, TESTED local |
 | Packaged JAR startup và health check | TESTED local |
 | Concurrent checkout: hai request, đúng một sale | TESTED local |
-| Optional feature assessment, Phase 9 | COMPLETED |
-| Spring Security, JWT, ADMIN/STAFF, Google OIDC, Phase 10 | IMPLEMENTED, TESTED local |
+| Customer management (tạo/cập nhật khách hàng) | IMPLEMENTED |
+| Online reservations (đặt hàng trực tuyến) | IMPLEMENTED |
+| WarrantyClaim (xử lý khiếu nại bảo hành) | IMPLEMENTED |
+| Audit log vận hành | IMPLEMENTED |
+| Admin UI (HTML/JS tĩnh nhúng trong JAR) | IMPLEMENTED, TESTED local (Playwright) |
+| Postman collection acceptance tests | IMPLEMENTED (Newman) |
+| CI pipeline Java-only (GitHub Actions) | ACTIVE — `java-ci.yml` |
+| CI pipeline Node.js cũ | DISABLED — `be-ci.yml.disabled` |
 | Frontend mới tương thích Java API | PLANNED |
 | Production deployment | NOT DEPLOYED |
 
@@ -74,10 +76,28 @@ chờ một PostgreSQL row lock và chứng minh:
 - Chỉ một Order và OrderItem hợp lệ tồn tại.
 - DeviceUnit kết thúc ở `SOLD`.
 
-### Warranty
+### Online Reservations
 
-Warranty gắn trực tiếp với một DeviceUnit `SOLD`. Mỗi thiết bị có tối đa một Warranty,
-thời hạn 1–36 tháng. PostgreSQL unique/FK/check constraints bảo vệ các invariant.
+Khách hàng có thể đặt thiết bị trực tuyến trước khi thanh toán. Reservation có thời
+hạn và sẽ hết hạn tự động nếu không được xác nhận. Module `online/` quản lý toàn bộ
+vòng đời này.
+
+### Customer
+
+Module `customer/` quản lý thông tin khách hàng bao gồm tạo mới, cập nhật. Order có
+thể gắn với Customer.
+
+### Warranty và WarrantyClaim
+
+`Warranty` gắn trực tiếp với một DeviceUnit `SOLD`. Mỗi thiết bị có tối đa một
+Warranty, thời hạn 1–36 tháng. `WarrantyClaim` quản lý khiếu nại theo Warranty —
+mỗi claim có trạng thái riêng và có thể được cập nhật bởi STAFF/ADMIN.
+
+### Audit
+
+Module `audit/` ghi lại toàn bộ hành động vận hành quan trọng (inspection, checkout,
+cấp warranty, cập nhật user…). ADMIN có thể tra cứu audit log theo actor, target hoặc
+khoảng thời gian.
 
 ## Kiến trúc
 
@@ -102,16 +122,24 @@ backend-java/
 ├─ src/main/java/com/example/refurbished/
 │  ├─ product/       # Product API và persistence
 │  ├─ inventory/     # DeviceUnit, inspection, lifecycle
-│  ├─ order/         # Order, OrderItem, checkout
-│  ├─ warranty/      # Warranty theo DeviceUnit SOLD
-│  ├─ security/      # User, role, JWT, Google OIDC
+│  ├─ order/         # Order, OrderItem, checkout, idempotency
+│  ├─ warranty/      # Warranty và WarrantyClaim
+│  ├─ customer/      # Customer management
+│  ├─ online/        # Online reservations
+│  ├─ audit/         # Audit log vận hành
+│  ├─ security/      # User, role, JWT, Google OIDC, rate limiter
 │  └─ common/        # config, health, errors, API helpers
 ├─ src/main/resources/
 │  ├─ application.yml
 │  ├─ application-dev.yml
-│  └─ db/migration/  # Flyway V1–V5
+│  ├─ application-staging.yml
+│  ├─ static/admin/  # Admin UI (HTML/JS/CSS tĩnh, nhúng trong JAR)
+│  └─ db/migration/  # Flyway V1–V11
 ├─ src/test/         # unit + PostgreSQL integration tests
+├─ postman/          # Postman collection acceptance tests
+├─ scripts/          # PowerShell scripts vận hành local
 ├─ compose.local.yml # PostgreSQL dev/test cô lập
+├─ Dockerfile
 ├─ mvnw / mvnw.cmd
 └─ docs/
 ```
@@ -123,12 +151,16 @@ backend-java/
 - Spring Web / Spring MVC.
 - Spring Data JPA và Hibernate.
 - PostgreSQL 17.11 và PostgreSQL JDBC.
-- Flyway migrations.
+- Flyway migrations (V1–V11).
 - Bean Validation.
 - Spring Security, OAuth2 Resource Server và OAuth2 Client.
+- SpringDoc OpenAPI (Swagger UI).
 - Maven Wrapper 3.3.4 / Maven 3.9.16.
 - JUnit 5 và Spring Boot Test.
+- Newman (Postman CLI) cho acceptance tests.
+- Playwright (Chromium) cho browser tests của Admin UI.
 - Docker Compose cho PostgreSQL development/test.
+- GitHub Actions CI (`java-ci.yml`).
 
 Không có Lombok, H2, Redis, Stripe, Kafka hoặc microservices trong Java runtime.
 
@@ -159,15 +191,41 @@ Không có Lombok, H2, Redis, Stripe, Kafka hoặc microservices trong Java runt
 |---|---|---|
 | POST | `/api/orders/checkout` | Transactional checkout DeviceUnit AVAILABLE |
 | GET | `/api/orders/{id}` | Order và price-snapshot items |
+| GET | `/api/orders` | Danh sách orders (ADMIN/STAFF) |
 
-### Warranty và health
+### Online reservations
+
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| POST | `/api/online/reservations` | Đặt thiết bị trực tuyến |
+| GET | `/api/online/reservations/{id}` | Chi tiết reservation |
+| DELETE | `/api/online/reservations/{id}` | Hủy reservation |
+
+### Customer
+
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| POST | `/api/customers` | Tạo khách hàng |
+| GET | `/api/customers/{id}` | Chi tiết khách hàng |
+| PUT | `/api/customers/{id}` | Cập nhật khách hàng |
+| GET | `/api/customers` | Danh sách khách hàng (ADMIN/STAFF) |
+
+### Warranty và WarrantyClaim
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
 | POST | `/api/warranties` | Cấp Warranty cho DeviceUnit SOLD |
 | GET | `/api/warranties/{id}` | Tra cứu Warranty |
 | GET | `/api/warranties/device-unit/{deviceUnitId}` | Tra cứu theo thiết bị |
-| GET | `/api/health` | Kiểm tra HTTP và database |
+| POST | `/api/warranty-claims` | Tạo khiếu nại bảo hành |
+| GET | `/api/warranty-claims/{id}` | Chi tiết claim |
+| PUT | `/api/warranty-claims/{id}/status` | Cập nhật trạng thái claim (STAFF/ADMIN) |
+
+### Audit
+
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| GET | `/api/audit` | Tra cứu audit log (ADMIN) |
 
 ### Authentication và users
 
@@ -176,8 +234,13 @@ Không có Lombok, H2, Redis, Stripe, Kafka hoặc microservices trong Java runt
 | POST | `/api/auth/login` | Public; email/password → JWT |
 | GET | `/api/auth/me` | Authenticated |
 | POST | `/api/auth/oauth/exchange` | Public; one-time Google code → JWT |
+| POST | `/api/auth/logout-all` | Authenticated; vô hiệu hóa tất cả JWT cũ |
+| POST | `/api/auth/change-password` | Authenticated |
 | GET | `/oauth2/authorization/google` | Public khi Google credentials được cấu hình |
 | POST | `/api/users` | ADMIN |
+| PUT | `/api/users/{id}/role` | ADMIN |
+| PUT | `/api/users/{id}/status` | ADMIN |
+| GET | `/api/health` | Public |
 
 GET Product là public. ADMIN quản lý Product/User. ADMIN và STAFF thực hiện intake,
 inspection, checkout và cấp Warranty. Order, Warranty và inventory detail yêu cầu JWT.
@@ -188,12 +251,13 @@ inspection, checkout và cấp Warranty. Order, Warranty và inventory detail y�
 |---|---|---|
 | dev | `jdbc:postgresql://127.0.0.1:55432/refurbished_dev` | `refurbished_app` |
 | test | `jdbc:postgresql://127.0.0.1:55433/refurbished_test` | `refurbished_test` |
+| staging | `jdbc:postgresql://...` | (cấu hình qua env) |
 
 `LocalDataSourceConfiguration` từ chối remote host, database/user sai, query parameter
 không được phép và profile không hợp lệ trước khi tạo connection pool. Hibernate dùng
 `ddl-auto=validate`; Flyway là thành phần duy nhất thay đổi schema.
 
-Migrations:
+### Flyway migrations
 
 | Version | Nội dung |
 |---|---|
@@ -202,6 +266,12 @@ Migrations:
 | V3 | Sales Order và OrderItem |
 | V4 | Warranty |
 | V5 | App users và one-time OAuth login codes |
+| V6 | Token version (logout-all invalidation) |
+| V7 | Operations audit log và checkout idempotency requests |
+| V8 | Online reservations |
+| V9 | Inspections và repair state |
+| V10 | Customers và order statuses |
+| V11 | WarrantyClaim |
 
 ## Chạy local trên Windows
 
@@ -210,30 +280,16 @@ Yêu cầu: JDK 21, Docker Desktop Linux Engine và PowerShell.
 ```powershell
 cd D:\PROJECT\Refurbished-Tech\backend-java
 
-# Tạo local credentials mới; không đọc secrets Node/production.
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Initialize-Local.ps1
+# Khởi động hai PostgreSQL database của Java workspace.
+.\scripts\Start-Local.ps1
 
-# Chỉ khởi động hai PostgreSQL database của Java workspace.
-docker --host npipe:////./pipe/dockerDesktopLinuxEngine compose `
-  --env-file .env.local -f compose.local.yml up -d --wait
-
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-& .\scripts\Use-LocalEnvironment.ps1
-
-# Chỉ cần khi tạo ADMIN lần đầu; nhập password mà không ghi vào command history.
-$env:REFURBISHED_BOOTSTRAP_ADMIN_EMAIL = 'admin@local.test'
-$env:REFURBISHED_BOOTSTRAP_ADMIN_PASSWORD = `
-  [System.Net.NetworkCredential]::new('', (Read-Host 'Admin password' -AsSecureString)).Password
-
+# Chạy toàn bộ kiểm thử (unit + integration tests).
 .\mvnw.cmd --batch-mode --no-transfer-progress clean verify
 
-# Đích: 127.0.0.1:55432/refurbished_dev, role refurbished_app.
+# Khởi động server dev.
 java -jar .\target\refurbished-backend-0.0.1-SNAPSHOT.jar `
   --spring.profiles.active=dev
 ```
-
-Sau khi ADMIN được tạo lần đầu, xóa hai bootstrap environment variables. Lần chạy
-sau không cần đặt lại chúng.
 
 Terminal khác:
 
@@ -251,35 +307,55 @@ Không chạy migration, seed, test hoặc schema generation trên production da
 
 ## Kiểm thử
 
-Build cuối Phase 10 có:
+Build hiện tại có:
 
 | Nhóm | Số test | Kết quả |
 |---|---:|---|
-| Unit tests | 18 | PASS |
-| Integration tests | 55 | PASS |
-| **Tổng** | **73** | **0 failures, 0 errors, 0 skipped** |
+| Unit tests | 47 | PASS |
+| Integration tests (PostgreSQL thật) | 38 | PASS |
+| **Tổng** | **85** | **0 failures, 0 errors, 0 skipped** |
 
-Integration tests dùng PostgreSQL thật tại `refurbished_test`, kiểm tra đúng database
-trước khi tạo/xóa fixture và không truncate database development.
-
-Các nhóm test chính:
+Bao gồm:
 
 - Configuration/database safety guard.
 - Product và DeviceUnit CRUD/validation/constraints.
 - Inspection lifecycle và rollback.
 - Order checkout, price snapshot và atomicity.
 - Hai concurrent HTTP checkout tranh cùng một row lock.
-- Warranty rules và persistence.
-- JWT authentication, ADMIN/STAFF authorization và one-time OAuth exchange.
+- Online reservations.
+- Operations/Audit API.
+- Warranty và WarrantyClaim rules.
+- JWT authentication, ADMIN/STAFF authorization, logout-all, rate limiting.
+- Newman Postman acceptance (17 requests, 23 assertions).
+- Playwright Admin UI browser test (Chromium).
+
+## CI/CD
+
+- **Java pipeline**: `.github/workflows/java-ci.yml` — kích hoạt khi có thay đổi trong
+  `backend-java/**`. Chạy toàn bộ unit + integration tests trên GitHub Actions.
+- **Node pipeline cũ**: `.github/workflows/be-ci.yml.disabled` — đã vô hiệu hoá.
+
+## Luồng làm việc (Git workflow)
+
+```text
+main                      ← nhánh ổn định
+  └─ feature/<tính năng>  ← phát triển trên đây, tạo PR về main
+```
 
 ## Phase 9 — optional feature decisions
 
 | Feature | Quyết định hiện tại |
 |---|---|
-| Authentication/JWT | IMPLEMENTED trong Phase 10 |
+| Authentication/JWT | IMPLEMENTED (Phase 10) |
 | Google OAuth | IMPLEMENTED; live Google login cần credentials thật để xác minh |
+| Login rate limiting | IMPLEMENTED |
+| Token invalidation (logout-all) | IMPLEMENTED qua token version |
+| WarrantyClaim | IMPLEMENTED (V11) |
+| Customer | IMPLEMENTED (V10) |
+| Online reservations | IMPLEMENTED (V8) |
+| Audit log | IMPLEMENTED (V7) |
+| Admin UI (embedded) | IMPLEMENTED |
 | Redis view dedup | REMOVE vì Java domain không có view counter |
-| Reservation expiration | REDESIGN nếu có async payment |
 | Stripe | REDESIGN/POSTPONE; cần pending-payment lifecycle trước |
 | Email | POSTPONE, phụ thuộc auth/business events |
 | Upload/Cloudinary | POSTPONE, cần ProductImage model |
@@ -287,53 +363,46 @@ Các nhóm test chính:
 | Cart | REDESIGN theo unique DeviceUnit và reservation policy |
 | Frontend cũ | REDESIGN; API contracts không tương thích |
 | Docker PostgreSQL local | KEEP, IMPLEMENTED |
-| Java app container/Nginx/deployment | POSTPONE |
+| Java app container/Dockerfile | IMPLEMENTED (Dockerfile có sẵn) |
+| Staging config | IMPLEMENTED (application-staging.yml) |
 
-Chi tiết và bằng chứng source: [Phase 9 decision record](backend-java/docs/PHASE-9.md).
+## Mapping Spring Boot concepts
 
-## Node và frontend cũ
-
-```text
-be/  # Node/Express/Sequelize reference
-fe/  # React generic e-commerce reference
-```
-
-Không xóa hai thư mục này chỉ vì Java core đã hoàn thành. Frontend cũ còn phụ thuộc
-Node auth/cart/payment/product contract. Có thể archive bản copy Node sau khi frontend
-mới thay thế nó hoặc khi xác nhận không còn dùng frontend cũ. Original Node repository
-và production website tuyệt đối không thuộc phạm vi xóa/sửa của workspace này.
-
-## Mapping để học Java
-
-| Node/.NET | Java/Spring |
+| Khái niệm | Java/Spring |
 |---|---|
-| Express controller / ASP.NET Controller | `@RestController` |
-| Service / ASP.NET DI service | `@Service` + constructor injection |
-| Sequelize model / EF Core entity | JPA `@Entity` |
-| Sequelize transaction / EF transaction | Spring `@Transactional` |
-| Sequelize lock / SQL in EF | JPA `PESSIMISTIC_WRITE` |
-| Joi/express-validator / DataAnnotations | Bean Validation |
-| Sequelize/EF migrations | Flyway SQL migrations |
-| package.json / `.csproj` | Maven `pom.xml` |
-| JS number / C# decimal | Java `BigDecimal` cho tiền |
-| JS Date / DateTimeOffset | Java `Instant` |
-| DateOnly | Java `LocalDate` |
+| REST Controller | `@RestController` |
+| DI service | `@Service` + constructor injection |
+| ORM entity | JPA `@Entity` |
+| Transaction | Spring `@Transactional` |
+| Pessimistic lock | JPA `PESSIMISTIC_WRITE` |
+| Validation | Bean Validation (`@NotNull`, `@Size`…) |
+| DB migrations | Flyway SQL migrations |
+| Build tool | Maven `pom.xml` |
+| Money type | Java `BigDecimal` |
+| UTC timestamp | Java `Instant` |
+| Date only | Java `LocalDate` |
+| Auth framework | Spring Security + JWT |
+| Testing | JUnit 5 + Spring Boot Test |
 
-## Tài liệu theo phase
+## Tài liệu
 
-- [Phase 4 — Product và DeviceUnit](backend-java/docs/PHASE-4.md)
-- [Phase 5 — Inspection lifecycle](backend-java/docs/PHASE-5.md)
-- [Phase 6 — Order và checkout](backend-java/docs/PHASE-6.md)
-- [Phase 7 — Concurrency proof](backend-java/docs/PHASE-7.md)
-- [Phase 8 — Warranty](backend-java/docs/PHASE-8.md)
-- [Phase 9 — Optional feature assessment](backend-java/docs/PHASE-9.md)
-- [Phase 10 — Security, JWT và Google OAuth](backend-java/docs/PHASE-10.md)
+- [Kế hoạch tổng thể](PLAN.md)
+- [Sơ đồ workflow/dữ liệu](docs/planning/README.md)
+- [STEP-1A — Accounts, logout-all, local recovery](backend-java/docs/STEP-1A-ACCOUNTS.md)
+- [STEP-2 — Operations API](backend-java/docs/STEP-2-OPERATIONS.md)
+- [Postman collection](backend-java/postman/README.md)
+- [Swagger UI](backend-java/docs/SWAGGER.md)
+- [Hướng dẫn vận hành](backend-java/docs/OPERATIONS.md)
 
 ## CV integrity
 
 Có thể mô tả là đã **implemented và tested locally**: Spring Boot REST API,
 per-device inventory, inspection state machine, transactional checkout, pessimistic
-locking, PostgreSQL constraints/Flyway và Warranty.
+locking, PostgreSQL constraints/Flyway, Warranty, WarrantyClaim, Customer management,
+Online reservations, Audit log, Admin UI, JWT auth, rate limiting, token invalidation,
+Newman + Playwright acceptance tests và GitHub Actions CI.
 
-Không mô tả là đã triển khai production, phục vụ traffic thực, tích hợp payment/auth,
-hoặc đạt performance benchmark. Các hạng mục đó chưa được thực hiện.
+Không mô tả là đã triển khai production, phục vụ traffic thực, tích hợp payment/auth
+production, hoặc đạt performance benchmark. Các hạng mục đó chưa được thực hiện.
+
+
