@@ -11,8 +11,7 @@
 
 Java/Spring Boot backend quản lý từng thiết bị refurbished vật lý theo serial number,
 quy trình kiểm định, bán hàng an toàn khi có request đồng thời và bảo hành theo thiết
-bị. Project được xây trong migration workspace từ bài học của backend Node.js cũ;
-đây không phải bản dịch từng dòng và không dùng database hoặc secrets production.
+bị. Project không dùng database hoặc secrets production.
 
 ## Trạng thái hiện tại
 
@@ -28,8 +27,7 @@ bị. Project được xây trong migration workspace từ bài học của back
 | Frontend mới tương thích Java API | PLANNED |
 | Production deployment | NOT DEPLOYED |
 
-Backend Node và React cũ vẫn nằm trong `be/` và `fe/` để tham khảo. Chúng không phải
-runtime của Java backend và frontend cũ chưa tương thích với Java API.
+Frontend mới tương thích Java API đang được lên kế hoạch. Xem [kế hoạch](PLAN.md) để biết thêm chi tiết.
 
 ## Nghiệp vụ cốt lõi
 
@@ -210,7 +208,7 @@ Yêu cầu: JDK 21, Docker Desktop Linux Engine và PowerShell.
 ```powershell
 cd D:\PROJECT\Refurbished-Tech\backend-java
 
-# Tạo local credentials mới; không đọc secrets Node/production.
+# Tạo local credentials mới; không đọc secrets production.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Initialize-Local.ps1
 
 # Chỉ khởi động hai PostgreSQL database của Java workspace.
@@ -285,39 +283,28 @@ Các nhóm test chính:
 | Upload/Cloudinary | POSTPONE, cần ProductImage model |
 | Gemini chatbot | REMOVE vì prompt generic fashion/cart không phù hợp |
 | Cart | REDESIGN theo unique DeviceUnit và reservation policy |
-| Frontend cũ | REDESIGN; API contracts không tương thích |
+| Frontend mới | PLANNED |
 | Docker PostgreSQL local | KEEP, IMPLEMENTED |
 | Java app container/Nginx/deployment | POSTPONE |
 
-Chi tiết và bằng chứng source: [Phase 9 decision record](backend-java/docs/PHASE-9.md).
+Chi tiết: [Phase 9 decision record](backend-java/docs/PHASE-9.md).
 
-## Node và frontend cũ
+## Spring Boot concepts
 
-```text
-be/  # Node/Express/Sequelize reference
-fe/  # React generic e-commerce reference
-```
-
-Không xóa hai thư mục này chỉ vì Java core đã hoàn thành. Frontend cũ còn phụ thuộc
-Node auth/cart/payment/product contract. Có thể archive bản copy Node sau khi frontend
-mới thay thế nó hoặc khi xác nhận không còn dùng frontend cũ. Original Node repository
-và production website tuyệt đối không thuộc phạm vi xóa/sửa của workspace này.
-
-## Mapping để học Java
-
-| Node/.NET | Java/Spring |
+| Khái niệm | Java/Spring |
 |---|---|
-| Express controller / ASP.NET Controller | `@RestController` |
-| Service / ASP.NET DI service | `@Service` + constructor injection |
-| Sequelize model / EF Core entity | JPA `@Entity` |
-| Sequelize transaction / EF transaction | Spring `@Transactional` |
-| Sequelize lock / SQL in EF | JPA `PESSIMISTIC_WRITE` |
-| Joi/express-validator / DataAnnotations | Bean Validation |
-| Sequelize/EF migrations | Flyway SQL migrations |
-| package.json / `.csproj` | Maven `pom.xml` |
-| JS number / C# decimal | Java `BigDecimal` cho tiền |
-| JS Date / DateTimeOffset | Java `Instant` |
-| DateOnly | Java `LocalDate` |
+| REST Controller | `@RestController` |
+| DI service | `@Service` + constructor injection |
+| ORM entity | JPA `@Entity` |
+| Transaction | Spring `@Transactional` |
+| Pessimistic lock | JPA `PESSIMISTIC_WRITE` |
+| Validation | Bean Validation (`@NotNull`, `@Size`…) |
+| DB migrations | Flyway SQL migrations |
+| Build tool | Maven `pom.xml` |
+| Money | Java `BigDecimal` |
+| UTC timestamp | Java `Instant` |
+| Date only | Java `LocalDate` |
+| Auth | Spring Security + JWT |
 
 ## Tài liệu theo phase
 
