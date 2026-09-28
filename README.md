@@ -7,8 +7,7 @@
 
 Java/Spring Boot backend quản lý từng thiết bị refurbished vật lý theo serial number,
 quy trình kiểm định, bán hàng an toàn khi có request đồng thời và bảo hành theo thiết
-bị. Project được xây trong migration workspace từ bài học của backend Node.js cũ;
-đây không phải bản dịch từng dòng và không dùng database hoặc secrets production.
+bị. Project không dùng database hoặc secrets production.
 
 ## Trạng thái hiện tại
 
@@ -30,8 +29,7 @@ bị. Project được xây trong migration workspace từ bài học của back
 | Frontend mới tương thích Java API | PLANNED |
 | Production deployment | NOT DEPLOYED |
 
-Backend Node và React cũ vẫn nằm trong `be/` và `fe/` để tham khảo. Chúng không phải
-runtime của Java backend và frontend cũ chưa tương thích với Java API.
+Frontend mới tương thích Java API đang được lên kế hoạch. Xem [kế hoạch](PLAN.md) để biết thêm chi tiết.
 
 ## Nghiệp vụ cốt lõi
 
@@ -52,7 +50,7 @@ Không dùng `Product.quantity`. Serial number của DeviceUnit là unique toàn
 
 ```text
 RECEIVED → INSPECTING → AVAILABLE
-                      → REJECTED
+                       → REJECTED
 ```
 
 Thiết bị chỉ được bán sau khi inspection đạt yêu cầu. Backend từ chối transition sai,
@@ -280,8 +278,20 @@ Yêu cầu: JDK 21, Docker Desktop Linux Engine và PowerShell.
 ```powershell
 cd D:\PROJECT\Refurbished-Tech\backend-java
 
-# Khởi động hai PostgreSQL database của Java workspace.
-.\scripts\Start-Local.ps1
+# Tạo local credentials mới; không đọc secrets production.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Initialize-Local.ps1
+
+# Chỉ khởi động hai PostgreSQL database của Java workspace.
+docker --host npipe:////./pipe/dockerDesktopLinuxEngine compose `
+  --env-file .env.local -f compose.local.yml up -d --wait
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+& .\scripts\Use-LocalEnvironment.ps1
+
+# Chỉ cần khi tạo ADMIN lần đầu; nhập password mà không ghi vào command history.
+$env:REFURBISHED_BOOTSTRAP_ADMIN_EMAIL = 'admin@local.test'
+$env:REFURBISHED_BOOTSTRAP_ADMIN_PASSWORD = `
+  [System.Net.NetworkCredential]::new('', (Read-Host 'Admin password' -AsSecureString)).Password
 
 # Chạy toàn bộ kiểm thử (unit + integration tests).
 .\mvnw.cmd --batch-mode --no-transfer-progress clean verify
@@ -361,8 +371,16 @@ main                      ← nhánh ổn định
 | Upload/Cloudinary | POSTPONE, cần ProductImage model |
 | Gemini chatbot | REMOVE vì prompt generic fashion/cart không phù hợp |
 | Cart | REDESIGN theo unique DeviceUnit và reservation policy |
-| Frontend cũ | REDESIGN; API contracts không tương thích |
+| Frontend mới | PLANNED |
 | Docker PostgreSQL local | KEEP, IMPLEMENTED |
+| Java app container/Nginx/deployment | POSTPONE |
+
+Chi tiết: [Phase 9 decision record](backend-java/docs/PHASE-9.md).
+
+## Spring Boot concepts
+
+| Khái niệm | Trạng thái |
+|---|---|
 | Java app container/Dockerfile | IMPLEMENTED (Dockerfile có sẵn) |
 | Staging config | IMPLEMENTED (application-staging.yml) |
 
@@ -378,11 +396,20 @@ main                      ← nhánh ổn định
 | Validation | Bean Validation (`@NotNull`, `@Size`…) |
 | DB migrations | Flyway SQL migrations |
 | Build tool | Maven `pom.xml` |
-| Money type | Java `BigDecimal` |
+| Money | Java `BigDecimal` |
 | UTC timestamp | Java `Instant` |
 | Date only | Java `LocalDate` |
-| Auth framework | Spring Security + JWT |
-| Testing | JUnit 5 + Spring Boot Test |
+| Auth | Spring Security + JWT |
+
+## Tài liệu theo phase
+
+- [Phase 4 — Product và DeviceUnit](backend-java/docs/PHASE-4.md)
+- [Phase 5 — Inspection lifecycle](backend-java/docs/PHASE-5.md)
+- [Phase 6 — Order và checkout](backend-java/docs/PHASE-6.md)
+- [Phase 7 — Concurrency proof](backend-java/docs/PHASE-7.md)
+- [Phase 8 — Warranty](backend-java/docs/PHASE-8.md)
+- [Phase 9 — Optional feature assessment](backend-java/docs/PHASE-9.md)
+- [Phase 10 — Security, JWT và Google OAuth](backend-java/docs/PHASE-10.md)
 
 ## Tài liệu
 
@@ -404,5 +431,3 @@ Newman + Playwright acceptance tests và GitHub Actions CI.
 
 Không mô tả là đã triển khai production, phục vụ traffic thực, tích hợp payment/auth
 production, hoặc đạt performance benchmark. Các hạng mục đó chưa được thực hiện.
-
-
